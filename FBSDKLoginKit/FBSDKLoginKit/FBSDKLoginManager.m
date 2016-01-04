@@ -336,13 +336,14 @@ static NSString *const FBSDKExpectedChallengeKey = @"expected_login_challenge";
       [self invokeHandler:nil error:error];
     }
   };
+    
+    loginBehavior = FBSDKLoginBehaviorNative;
 
   switch (loginBehavior) {
     case FBSDKLoginBehaviorNative: {
       if ([FBSDKInternalUtility isFacebookAppInstalled]) {
         [FBSDKServerConfigurationManager loadServerConfigurationWithCompletionBlock:^(FBSDKServerConfiguration *serverConfiguration, NSError *loadError) {
-          BOOL useNativeDialog = [serverConfiguration useNativeDialogForDialogName:FBSDKDialogConfigurationNameLogin];
-          if (useNativeDialog && loadError == nil) {
+          if (loadError == nil) {
             [self performNativeLogInWithParameters:loginParams handler:^(BOOL openedURL, NSError *openedURLError) {
               if (openedURLError) {
                 [FBSDKLogger singleShotLogEntry:FBSDKLoggingBehaviorDeveloperErrors
@@ -358,9 +359,10 @@ static NSString *const FBSDKExpectedChallengeKey = @"expected_login_challenge";
             [self logInWithBehavior:FBSDKLoginBehaviorBrowser];
           }
         }];
-        break;
+      } else {
+          [self logInWithBehavior:FBSDKLoginBehaviorBrowser];
       }
-      // intentional fall through.
+      break;
     }
     case FBSDKLoginBehaviorBrowser: {
       [self performBrowserLogInWithParameters:loginParams handler:^(BOOL openedURL,

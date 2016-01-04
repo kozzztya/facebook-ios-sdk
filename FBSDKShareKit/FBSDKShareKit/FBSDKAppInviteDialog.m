@@ -135,9 +135,7 @@
 
 - (BOOL)_canShowNative
 {
-  FBSDKServerConfiguration *configuration = [FBSDKServerConfigurationManager cachedServerConfiguration];
-  BOOL useNativeDialog = [configuration useNativeDialogForDialogName:FBSDKDialogConfigurationNameAppInvite];
-  return (useNativeDialog && [FBSDKInternalUtility isFacebookAppInstalled]);
+  return [FBSDKInternalUtility isFacebookAppInstalled];
 }
 
 - (void)_handleCompletionWithDialogResults:(NSDictionary *)results error:(NSError *)error
