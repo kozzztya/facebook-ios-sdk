@@ -336,8 +336,10 @@ static NSString *const FBSDKExpectedChallengeKey = @"expected_login_challenge";
       [self invokeHandler:nil error:error];
     }
   };
-    
+
+  if ([FBSDKInternalUtility isFacebookAppInstalled] && (loginBehavior != FBSDKLoginBehaviorSystemAccount)) {
     loginBehavior = FBSDKLoginBehaviorNative;
+  }
 
   switch (loginBehavior) {
     case FBSDKLoginBehaviorNative: {
@@ -351,18 +353,12 @@ static NSString *const FBSDKExpectedChallengeKey = @"expected_login_challenge";
               }
               if (openedURL) {
                 completion(YES, FBSDKLoginManagerLoggerAuthMethod_Native, openedURLError);
-              } else {
-                [self logInWithBehavior:FBSDKLoginBehaviorBrowser];
+                return;
               }
             }];
-          } else {
-            [self logInWithBehavior:FBSDKLoginBehaviorBrowser];
           }
         }];
-      } else {
-          [self logInWithBehavior:FBSDKLoginBehaviorBrowser];
       }
-      break;
     }
     case FBSDKLoginBehaviorBrowser: {
       [self performBrowserLogInWithParameters:loginParams handler:^(BOOL openedURL,
