@@ -39,6 +39,7 @@ static NSString *const FBSDKExpectedChallengeKey = @"expected_login_challenge";
   FBSDKLoginManagerLogger *_logger;
   // YES if we're calling out to the Facebook app or Safari to perform a log in
   BOOL _performingLogIn;
+  BOOL _forceBrowser;
   FBSDKKeychainStore *_keychainStore;
 }
 
@@ -337,58 +338,75 @@ static NSString *const FBSDKExpectedChallengeKey = @"expected_login_challenge";
     }
   };
 
+  NSLog ( @"_forceBrowser = %d", _forceBrowser);
+
   if ([FBSDKInternalUtility isFacebookAppInstalled] && (loginBehavior != FBSDKLoginBehaviorSystemAccount)) {
     loginBehavior = FBSDKLoginBehaviorNative;
+    NSLog ( @"set native");
+  }
+
+  if (_forceBrowser == YES) {
+    loginBehavior = FBSDKLoginBehaviorBrowser;
+    NSLog ( @"_forceBrowser yes");
   }
 
   switch (loginBehavior) {
-    case FBSDKLoginBehaviorNative: {
-      if ([FBSDKInternalUtility isFacebookAppInstalled]) {
-        [FBSDKServerConfigurationManager loadServerConfigurationWithCompletionBlock:^(FBSDKServerConfiguration *serverConfiguration, NSError *loadError) {
-          if (loadError == nil) {
-            [self performNativeLogInWithParameters:loginParams handler:^(BOOL openedURL, NSError *openedURLError) {
-              if (openedURLError) {
-                [FBSDKLogger singleShotLogEntry:FBSDKLoggingBehaviorDeveloperErrors
-                                   formatString:@"FBSDKLoginBehaviorNative failed : %@\nTrying FBSDKLoginBehaviorBrowser", openedURLError];
-              }
-              if (openedURL) {
-                completion(YES, FBSDKLoginManagerLoggerAuthMethod_Native, openedURLError);
-                return;
-              }
-            }];
+      case FBSDKLoginBehaviorNative: {
+        if ([FBSDKInternalUtility isFacebookAppInstalled]) {
+          [FBSDKServerConfigurationManager loadServerConfigurationWithCompletionBlock:^(FBSDKServerConfiguration *serverConfiguration, NSError *loadError) {
+            if (loadError == nil) {
+              [self performNativeLogInWithParameters:loginParams handler:^(BOOL openedURL, NSError *openedURLError) {
+                if (openedURLError) {
+                  [FBSDKLogger singleShotLogEntry:FBSDKLoggingBehaviorDeveloperErrors
+                                     formatString:@"FBSDKLoginBehaviorNative failed : %@\nTrying FBSDKLoginBehaviorBrowser", openedURLError];
+                }
+                if (openedURL) {
+                  completion(YES, FBSDKLoginManagerLoggerAuthMethod_Native, openedURLError);
+                } else {
+                  NSLog ( @"not opened url");
+                  _forceBrowser = YES;
+                  [self logInWithBehavior:FBSDKLoginBehaviorBrowser];
+                }
+              }];
+            } else {
+              NSLog ( @"not useNativeDialog");
+              _forceBrowser = YES;
+              [self logInWithBehavior:FBSDKLoginBehaviorBrowser];
+            }
+          }];
+          break;
+        }
+        // intentional fall through.
+      }
+      case FBSDKLoginBehaviorBrowser: {
+        [self performBrowserLogInWithParameters:loginParams handler:^(BOOL openedURL,
+                                                                      NSString *authMethod,
+                                                                      NSError *openedURLError) {
+          if (openedURL) {
+            completion(YES, authMethod, openedURLError);
+          } else {
+            completion(NO, authMethod, openedURLError);
           }
         }];
+        break;
       }
+      case FBSDKLoginBehaviorSystemAccount: {
+        [FBSDKServerConfigurationManager loadServerConfigurationWithCompletionBlock:^(FBSDKServerConfiguration *serverConfiguration, NSError *loadError) {
+          if (serverConfiguration.isSystemAuthenticationEnabled && loadError == nil) {
+            [self beginSystemLogIn];
+          } else {
+            [self logInWithBehavior:FBSDKLoginBehaviorNative];
+          }
+        }];
+        completion(YES, FBSDKLoginManagerLoggerAuthMethod_System, nil);
+        break;
+      }
+      case FBSDKLoginBehaviorWeb:
+        [self performWebLogInWithParameters:loginParams handler:^(BOOL openedURL, NSError *openedURLError) {
+          completion(openedURL, FBSDKLoginManagerLoggerAuthMethod_Webview, openedURLError);
+        }];
+        break;
     }
-    case FBSDKLoginBehaviorBrowser: {
-      [self performBrowserLogInWithParameters:loginParams handler:^(BOOL openedURL,
-                                                                    NSString *authMethod,
-                                                                    NSError *openedURLError) {
-        if (openedURL) {
-          completion(YES, authMethod, openedURLError);
-        } else {
-          completion(NO, authMethod, openedURLError);
-        }
-      }];
-      break;
-    }
-    case FBSDKLoginBehaviorSystemAccount: {
-      [FBSDKServerConfigurationManager loadServerConfigurationWithCompletionBlock:^(FBSDKServerConfiguration *serverConfiguration, NSError *loadError) {
-        if (serverConfiguration.isSystemAuthenticationEnabled && loadError == nil) {
-          [self beginSystemLogIn];
-        } else {
-          [self logInWithBehavior:FBSDKLoginBehaviorNative];
-        }
-      }];
-      completion(YES, FBSDKLoginManagerLoggerAuthMethod_System, nil);
-      break;
-    }
-    case FBSDKLoginBehaviorWeb:
-      [self performWebLogInWithParameters:loginParams handler:^(BOOL openedURL, NSError *openedURLError) {
-        completion(openedURL, FBSDKLoginManagerLoggerAuthMethod_Webview, openedURLError);
-      }];
-      break;
-  }
 }
 
 - (void)storeExpectedChallenge:(NSString *)challengeExpected
